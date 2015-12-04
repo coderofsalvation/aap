@@ -1,0 +1,9 @@
+#!/bin/bash 
+cd "$(dirname "$(readlink -f "$0")" )"
+
+:>aap.json 
+[[ -d aap.testrepo ]] && rm -rf aap.testrepo
+../aap init foobar -f
+../aap install https://coderofsalvation@github.com/coderofsalvation/aap.testrepo --save
+grep -q "coderofsalvation/aap" aap.json || exit 1
+exit 0

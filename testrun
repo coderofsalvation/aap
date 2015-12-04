@@ -1,5 +1,9 @@
 #!/bin/bash
 set -u
-for test in test/*; do [[ -x $test && ! -d $test ]] && $test; done
+for test in test/*; do 
+  [[ -x $test && ! -d $test ]] && {
+    echo "-> $test" && $test || exit 1;
+  } 
+done
 echo 'OK'
 exit 0

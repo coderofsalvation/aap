@@ -29,7 +29,30 @@ Now lets push our buildpack to the repo:
     $ git add app.json && git commit -m "added aap manifest"
     $ git push origin master
 
-Congrats! Now other devs can easily run `aap install` or [deploy a cloud locally](doc/cloud.md)
+Congrats! Now other devs can easily run or [deploy a cloud locally](doc/cloud.md):
+
+    $ aap install
+
+    installing 'backend'
+        ├─ $ git clone ssh+git://user@bitbucket.org/username/backend.git
+        ├─ Cloning into 'backend'...
+        ├─ 
+        ├─  ʕ•x•ʔ
+        ├─ +-+-+-+  Your personal nested build & dependency monkey
+        ├─ |a|a|p|  [https://github.com/coderofsalvation/aap]
+        ├─ +-+-+-+
+        ├─ 
+        ├─   
+        ├─ installing 'backend'
+        ├─     ├─ $ git clone https://foo@bitbucket.org/username/backend-html-templates 
+        ├─     ├─ Cloning into 'backend-html-templates'...
+        ├─ 
+        ...and so on..
+        
+
+> NOTE recursive installation is supported when `aap.json` occurs in gitrepo-dependencies as well.
+
+Like npm, you can easily [trigger scripts](docs/scripts.md) using the `aap run <cmd>`, to build and configure stuff from one central place.
 
 ## Installation
 
@@ -77,7 +100,13 @@ Get any system to build a project from multiple remote sources.
                                           ┆   git@github.com:user/repo.git
                                           ┆   ssh+git://user@bitbucket.org/user/repo.git
                                           ┆   ssh+git://github.com/username/package.git
-
+                                          ┆   ssh+git://github.com/username/package.git#master
+                                          ┆   ssh+git://github.com/username/package.git#master#commit
+                                          ┆   ssh+git://github.com/username/package.git#master@1.0.2
+                                          ┆   npm://browserify 
+                                          ┆   composer://user/packagename
+       aap run <script>                   ┆ runs script defined in aap.json 
+     
 ## Goals/Usecases 
 
 * [run/deploy a cloud](doc/cloud.md) using multiple Docker cloudservices in one repo using [crowdr](https://github.com/polonskiy/crowdr)

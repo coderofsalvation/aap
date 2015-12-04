@@ -1,0 +1,9 @@
+#!/bin/bash 
+cd "$(dirname "$(readlink -f "$0")" )"
+
+:>aap.json 
+[[ -d node_modules ]] && rm -rf node_modules
+../aap init foobar -f
+../aap install npm://watchmakers --save-dev
+grep -A2 "devDependencies" aap.json | grep -q "npm://watchmakers" || exit 1
+exit 0

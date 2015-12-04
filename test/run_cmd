@@ -1,0 +1,7 @@
+#!/bin/bash 
+cd "$(dirname "$(readlink -f "$0")" )"
+
+:>aap.json 
+../aap init foobar -f
+../aap run start | grep -q start || exit 1
+exit 0

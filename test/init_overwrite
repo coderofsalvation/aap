@@ -1,0 +1,9 @@
+#!/bin/bash 
+cd "$(dirname "$(readlink -f "$0")" )"
+
+:>aap.json 
+../aap init foobar -f
+lines="$(cat aap.json | wc -l )"
+echo $lines
+[[ ${#lines} == 0 ]] && exit 1
+exit 0

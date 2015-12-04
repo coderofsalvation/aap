@@ -69,7 +69,9 @@ aap_json='{
   "repository": "https://github.com/jane-doe/small-sharp-tool",
   "logo": "https://small-sharp-tool.com/logo.svg",
   "scripts": {
+    "preinstall": "",
     "postinstall": ["install_modules"],
+    "predeploy": ["stop"],
     "postdeploy": ["start"],
     "start": "echo start",
     "stop": "echo stop",
@@ -533,7 +535,7 @@ _cleanup(){
 _logo(){
   echo '
  ʕ•x•ʔ
-+-+-+-+  Buildpacks for the web
++-+-+-+  Your personal nested build & dependency monkey
 |a|a|p|  [https://github.com/coderofsalvation/aap]
 +-+-+-+
 
@@ -560,7 +562,7 @@ _check(){
 }
 
 _usage(){
-  grep '^# Usage' $0 -A20 | sed 's/^#//g'
+  grep '^# Usage' $0 -A30 | sed 's/^#//g'
 }
 
 _console(){
@@ -612,14 +614,31 @@ _install_dependency_with_client(){
                ;;
     composer)  _exec composer install "${2/composer:/}" $3
                ;;
+    *)         if which $1 &>/dev/null; then 
+                 [[ -n $3 ]] && cd $3
+                 $1 $2 
+                 [[ -n $3 ]] && cd -
+               else 
+                 echo "$1 client not installed or found" && return 1
+               fi
+               ;;
+              
   esac
+  if [[ "$1" == "git" ]]; then 
+    [[ ${#path} > 0 ]] && cd $3 || cd "$(basename "$2")"
+    [[ -f aap.json ]] && { 
+      $( readlink "$0" ) install & 
+      wait $! ; [[ ! $? == 0 ]] && return 1;
+    }
+  fi
+  return 0
 }
 
 _install_dependency(){
   name="$1" ; source="$2" ; path="$3"
   client="$(_get_dependency_client "$source")"
   if [[ -d "$path/$name" ]] && ! _option_passed "-f"; then 
-    echo "'$path/name' already exist..retry with -f to force"
+    echo "'$path/$name' already exist..retry with -f to force"
   else 
     echo "installing '$name'"
     if [[ "${#path}" > 0 ]]; then 
@@ -644,6 +663,29 @@ _install_all(){
   done 
 }
 
+_install_dependency_save(){
+  name="$1" ; arg="$2" ; path="$3"
+  if _option_passed '--save' || _option_passed '--save-dev'; then 
+    aapfile="aap.json"
+    [[ ! -f $aapfile ]] && {
+      aapfile="$(_upsearch "aap.json" | head -n1 )"
+      name="$(echo "$name:$(pwd)/$name" | sed "s|$(dirname "$(readlink -f "$aapfile")" )/||g" )"
+    }
+    line='"'$name'": "'$arg'",'
+    _option_passed '--save' && depfield="dependencies" || depfield="devDependencies"
+    if grep -q "$line" $aapfile; then 
+      echo "not saving..already in aap.json"
+    else 
+      sed -i "s|$depfield\":{|$depfield\":{\n    $line|g" $aapfile
+      _cleanup_json $aapfile
+    fi  
+  fi;
+}
+
+_run_cmd(){
+  cmd="${1/*string /}"; eval "$cmd"
+}
+
 ## PUBLIC FUNCTIONS #################################################################
 
 # init 
@@ -665,23 +707,22 @@ install(){
     for arg in ${ARGS[@]}; do 
       name="$(basename "$arg")"; set +u; path="$3"; set -u
       _install_dependency "$name" "$arg" "$path"
-      ! _were_errors && {
-        if _option_passed '--save'; then 
-          aapfile="aap.json"
-          [[ ! -f $aapfile ]] && {
-            aapfile="$(_upsearch "aap.json" | head -n1 )"
-            name="$(echo "$name:$(pwd)/$name" | sed "s|$(dirname "$(readlink -f "$aapfile")" )/||g" )"
-          }
-          line='"'$name'": "'$arg'",'
-          if grep -q "$line" $aapfile; then 
-            echo "not saving..already in aap.json"
-          else 
-            sed -i "s|dependencies\":{|dependencies\":{\n    $line|g" $aapfile
-            _cleanup_json $aapfile
-          fi  
-        fi;
-      }
+      ! _were_errors && _install_dependency_save "$name" "$arg" "$path"
     done
+  fi
+}
+
+run(){
+  if [[ -f aap.json ]]; then 
+    json="$(json <aap.json)"
+    set +u; 
+    if [[ ! -n $1 ]]; then
+      echo -e "Usage: aap run <cmd>\n\navailable commands:\n"
+      echo "$json" | grep scripts | sed 's/\/scripts\///g;s/[\/ ].*//g;s/^/  /g';
+    else 
+      _run_cmd "$(echo "$json" | grep -F scripts/$1 )"
+    fi
+    set -u
   fi
 }
 
