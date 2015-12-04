@@ -1,0 +1,38 @@
+{
+  "name": "aap",
+  "version": "1.0.0",
+  "description": "",
+  "website": "https://small-sharp-tool.com/",
+  "repository": "https://github.com/jane-doe/small-sharp-tool",
+  "logo": "https://small-sharp-tool.com/logo.svg",
+  "scripts": {
+    "postinstall": ["install_modules"]
+    "postdeploy": ["start"],
+    "start": ".crowdr/crowdr start",
+    "stop": ".crowdr/crowdr stop",
+    "build": ".crowdr/crowdr build",
+    "backup": "zip -r data-`date +`.zip data",
+    "test": "echo 'Error: no test specified' && exit 0",
+    "install_modules":"which npm && npm install; which composer && composer install"
+  },
+  "dependencies":{
+    "crowdr:.util/crowdr":"git@github.com:polonskiy/crowdr.git"
+    "bar": "ssh+git://username@bitbucket.org/username/package.git#commit",
+    "foo:src/components": "ssh+git://github.com/username/package.git#commit",
+  },
+  "env": {
+    "SECRET_TOKEN": {
+      "description": "A secret key for verifying the integrity of signed cookies.",
+      "generator": "secret"
+    },
+    "WEB_CONCURRENCY": {
+      "description": "The number of processes to run.",
+      "value": "5"
+    }
+  },
+  "devDependencies":{
+    "watchmakers": "npm://watchmakers"
+  },
+  "author": "",
+  "license": "ISC"
+}

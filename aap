@@ -1,0 +1,664 @@
+#!/bin/bash 
+# Author: Leon van Kammen / Coder of Salvation
+# Website: https://github.com/coderofsalvation/nodejs-deploy-githook.bash
+# License: AGPL
+#
+# Usage: aap <cmd> [options]
+# 
+# aap.json Buildpacks for the web.
+# Easily manage dependencies of gitrepos, npm/composer modules and dockerrepos.
+# Combine a composable cloud in one slim repo.
+#
+# Commands:
+#
+#   aap init [name] [options]          ┆ generates aap manifest, options:
+#                                      ┆ -f = force, overwrites json
+#
+#   aap install [url] [..] [options]   ┆ no arguments installs all dependencies in aap.json
+#                                      ┆ -f         = force, overwrites existing dependencies
+#                                      ┆ --save     = save dependency to "dependencies" in aap.json
+#                                      ┆ --save-dev = save dependency to "devDependencies"
+#                                      ┆ --dev      = install from "devDependencies"
+#                                      ┆
+#                                      ┆ valid urls are:
+#                                      ┆   git@github.com:user/repo.git
+#                                      ┆   ssh+git://user@bitbucket.org/user/repo.git
+#                                      ┆   ssh+git://github.com/username/package.git
+#                                      ┆   ssh+git://github.com/username/package.git#master
+#                                      ┆   ssh+git://github.com/username/package.git#master#commit
+#                                      ┆   ssh+git://github.com/username/package.git#master@1.0.2
+#                                      ┆   npm://browserify 
+#                                      ┆   composer://user/packagename
+# 
+# Copyright (C) 2015, Leon van KAmmen 
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+TMP="/tmp/.($whoami).aap"
+:>$TMP.err
+self_path="$(dirname "$( readlink -f "$0" )" )"
+which tailf &>/dev/null && TAIL=tailf 
+[[ ! -n $TAIL ]] && TAIL="tail -f"
+ARGS=()
+ERRORS=()
+declare -A OPTS
+set -u -o pipefail
+
+dir_exists(){ [[ -d "$1" || -L "$1" ]] && return 0 || return 1; }
+
+trap "_cleanup" 0 1 SIGINT SIGTERM 
+
+## TEMPLATES ########################################################################
+aap_json='{
+  "name": "%s",
+  "version": "1.0.0",
+  "description": "",
+  "website": "https://small-sharp-tool.com/",
+  "repository": "https://github.com/jane-doe/small-sharp-tool",
+  "logo": "https://small-sharp-tool.com/logo.svg",
+  "scripts": {
+    "postinstall": ["install_modules"]
+    "postdeploy": ["start"],
+    "start": ".crowdr/crowdr start",
+    "stop": ".crowdr/crowdr stop",
+    "build": ".crowdr/crowdr build",
+    "backup": "zip -r data-`date +`.zip data",
+    "test": "echo \"Error: no test specified\" && exit 0",
+    "install_modules":"which npm && npm install; which composer && composer install"
+  },
+  "dependencies":{
+    "bar": "ssh+git://username@bitbucket.org/username/package.git#commit",
+    "foo:src/components": "ssh+git://github.com/username/package.git#commit",
+    "crowdr:.crowdr":"git@github.com:polonskiy/crowdr.git"
+  },
+  "env": {
+    "ADMIN_PASSWD": {
+      "description": "A secret key for verifying the integrity of signed cookies.",
+      "file": "data/.pw"
+    },
+    "WEB_CONCURRENCY": {
+      "description": "The number of processes to run.",
+      "value": "5"
+    }
+  },
+  "devDependencies":{
+    "watchmakers": "npm://watchmakers"
+  },
+  "author": "",
+  "license": "ISC"
+}'
+
+
+githook_post_receive='#!/bin/bash
+# this is the githook template, please modify at will
+while read oldrev newrev ref
+do
+  unset GIT_DIR
+  branch=$(echo $ref | cut -d/ -f3)
+  trap "echo deployment aborted :( ; exit 1" 1 2 3 4 5 SIGINT SIGTERM
+  trigger_hook(){ 
+    [[ -f $1 ]] && { echo "trigger $1" | tee -a nohup.out && $1; }
+  }
+
+  if [[ "master" == "$branch" ]]; then
+
+    cd "$projectdir" || { echo "$projectdir doesnt exist :("; exit 1; }
+    
+    trigger_hook .ndg/hooks/stop
+
+    git reset --hard      
+    git pull origin master
+    
+    trigger_hook .ndg/hooks/build
+
+    npm install --no-optional --production
+
+    trigger_hook .ndg/hooks/patch
+
+    npm test
+    
+    trigger_hook .ndg/hooks/test
+
+    nohup .ndg/hooks/start >> nohup.out 2>&1 & 
+
+  else 
+    echo "no actions for branch $branch"
+  fi
+
+done
+'
+
+
+## JSON PARSER  #####################################################################
+
+# `json.sh`, a pure-shell JSON parser.
+
+# Most users will be happy with the default '/' separator that makes trees
+# of keys look like filesystem paths but that breaks down if keys can
+# contain slashes.  In that case, set `JSON_SEPARATOR` to desired character.
+#[ -z "$JSON_SEPARATOR" ] && _J_S="/" || _J_S="$JSON_SEPARATOR"
+_J_S="/" 
+
+# File descriptor 3 is commandeered for debug output, which may end up being
+# forwarded to standard error.
+#[ -z "$JSON_DEBUG" ] && exec 3>/dev/null || exec 3>&2
+exec 3>/dev/null 
+
+# File descriptor 4 is commandeered for use as a sink for literal and
+# variable output of (inverted) sections that are not destined for standard
+# output because their condition is not met.
+exec 4>/dev/null
+
+# Consume standard input one character at a time to parse JSON.
+json() {
+  set +u
+  # Initialize the file descriptor to be used to emit characters.  At
+  # times this value will be 4 to send output to `/dev/null`.
+  _J_FD=1
+
+  # Initialize storage for the "pathname", the concatenation of all
+  # the keys in the tree at any point in time, the current state of
+  # the machine, and the state to which the machine returns after
+  # completing a key or value.
+  _J_PATHNAME="$_J_S" _J_STATE="whitespace" _J_STATE_DEFAULT="whitespace"
+
+  # IFS must only contain '\n' so as to be able to read space and tab
+  # characters from standard input one-at-a-time.  The easiest way to
+  # convince it to actually contain the correct byte, and only the
+  # correct byte, is to use a single-quoted literal newline.
+  IFS='
+'
+
+  # Consuming standard input one character at a time is quite a feat
+  # within the confines of POSIX shell.  Bash's `read` builtin has
+  # `-n` for limiting the number of characters consumed.  Here it is
+  # faked using `sed`(1) to place each character on its own line.
+  # The subtlety is that real newline characters are chomped so they
+  # must be indirectly detected by checking for zero-length
+  # characters, which is done as the character is emitted.
+  sed "
+    s/./&$(printf "\036")/g
+    s/\\\\/\\\\\\\\/g
+  " | tr "\036" "\n" | _json
+
+  # TODO Replace the original value of IFS.  Be careful if it's unset.
+
+}
+
+# Consume the one-character-per-line stream from `sed` via a state machine.
+# This function will be called recursively in subshell environments to
+# isolate values from their containing scope.
+#
+# The `read` builtin consumes one line at a time but by now each line
+# contains only a single character.
+_json() {
+  while read _J_C
+  do
+    _json_char
+    _J_PREV_C="$_J_C"
+  done
+}
+
+# Consume a single character as stored in `_J_C`.  This function is broken
+# out from `_json` so it may be called to reconsume a character as is
+# necessary following the end of any number since numbers do not have a
+# well-known ending in the grammar.
+#
+# The state machine implemented here follows very naturally from the
+# diagrams of the JSON grammar on <http://json.org>.
+_json_char() {
+  echo " _J_C: $_J_C (${#_J_C}), _J_STATE: $_J_STATE" >&3
+  case "$_J_STATE" in
+
+    # The machine starts in the "whitespace" state and learns
+    # from leading characters what state to enter next.  JSON's
+    # grammar doesn't contain any tokens that are ambiguous in
+    # their first character so the parser's job is relatively
+    # easier.
+    #
+    # Further whitespace characters are consumed and ignored.
+    #
+    # Arrays are unique in that their parsing rules are a strict
+    # superset of the rules in open whitespace.  When an opening
+    # bracket is encountered, the remainder of the array is
+    # parsed in a subshell which goes around again when a comma
+    # is encountered and exits back to the containing scope when
+    # the closing bracket is encountered.
+    #
+    # Objects are not parsed as a superset of open whitespace but
+    # they are parsed in a subshell to protect the containing scope.
+    "array-0"|"array-even"|"array-odd"|"whitespace")
+      case "$_J_STATE" in
+        "array-0")
+          case "$_J_C" in
+            "]") exit;;
+          esac;;
+        "array-even")
+          case "$_J_C" in
+            ",")
+              _J_DIRNAME="${_J_PATHNAME%"$_J_S"*}"
+              [ "$_J_DIRNAME" = "$_J_S" ] && _J_DIRNAME=""
+              _J_BASENAME="${_J_PATHNAME##*"$_J_S"}"
+              _J_BASENAME="$(($_J_BASENAME + 1))"
+              _J_PATHNAME="$_J_DIRNAME$_J_S$_J_BASENAME"
+              _J_STATE="array-odd"
+              continue;;
+            "]") exit;;
+          esac;;
+      esac
+      case "$_J_C" in
+        "\"") _J_STATE="string" _J_V="";;
+        "-") _J_STATE="number-negative" _J_V="$_J_C";;
+        0) _J_STATE="number-leading-zero" _J_V="$_J_C";;
+        [1-9]) _J_STATE="number-leading-nonzero" _J_V="$_J_C";;
+        "[")
+          (
+            [ "$_J_PATHNAME" = "/" ] && _J_PATHNAME=""
+            _J_PATHNAME="$_J_PATHNAME/0"
+            _J_STATE="array-0" _J_STATE_DEFAULT="array-even"
+            _json
+          )
+          _J_STATE="$_J_STATE_DEFAULT" _J_V="";;
+        "f"|"t") _J_STATE="boolean" _J_V="$_J_C";;
+        "n") _J_STATE="null" _J_V="$_J_C";;
+        "{")
+          (
+            _J_STATE="object-0" _J_STATE_DEFAULT="object-even"
+            _json
+          )
+          _J_STATE="$_J_STATE_DEFAULT" _J_V="";;
+        " "|""|" ") ;;
+        *) _json_die "corrupt json: $_J_PATHNAME";;
+      esac;;
+
+    # Boolean values are multicharacter literals but they're unique
+    # from their first character.  This means the eventual value is
+    # already known when the "boolean" state is entered so we can
+    # raise corrupt jsons as soon as the input goes south.
+    "boolean")
+      case "$_J_V$_J_C" in
+        "f"|"fa"|"fal"|"fals"|"t"|"tr"|"tru") _J_V="$_J_V$_J_C";;
+        "false"|"true")
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME boolean $_J_V$_J_C" >&$_J_FD;;
+        *) _json_die "corrupt json: $_J_PATHNAME boolean $_J_V$_J_C";;
+      esac;;
+
+    # Object values are relatively more complex than array values.
+    # They begin in the "object-0" state, which is almost but not
+    # quite a subset of the "whitespace" state for strings.  When
+    # a string is encountered it is parsed as usual but the parser
+    # is set to return to the "object-value" state afterward.
+    #
+    # As in the "whitespace" state, extra whitespace characters
+    # are consumed and ignored.
+    #
+    # The parser will return to this "object" state later to
+    # either consume a comma and go around again or exit the
+    # subshell in which this object has been parsed.
+    "object-0")
+      case "$_J_C" in
+        "\"")
+          _J_FD=4
+          _J_STATE="string"
+          _J_STATE_DEFAULT="object-value"
+          _J_V="";;
+        "}") exit;;
+        " "|""|" ") ;;
+        *) _json_die "corrupt json: $_J_PATHNAME";;
+      esac;;
+
+    # "object-even" is like "object-0" but additionally commas are
+    # consumed to enforce the another key/value pair is coming.
+    "object-even")
+      case "$_J_C" in
+        "\"")
+          _J_FD=4
+          _J_STATE="string"
+          _J_STATE_DEFAULT="object-value"
+          _J_V="";;
+        ",") _J_STATE="object-odd";;
+        "}") exit;;
+        " "|""|" ") ;;
+        *) _json_die "corrupt json: $_J_PATHNAME";;
+      esac;;
+
+    # Object values have to return from whence they came.  They use
+    # the "object-exit" state to signal the last character consumed
+    # to the containing scope.
+    "object-exit") #exit;;
+      case "$_J_C" in
+        ",") exit 101;;
+        "}") exit 102;;
+        *) exit 0;;
+      esac;;
+
+    # "object-even" is like "object-0" but cannot consume a closing
+    # brace because it has just consumed a comma.
+    "object-odd")
+      case "$_J_C" in
+        "\"")
+          _J_FD=4
+          _J_STATE="string"
+          _J_STATE_DEFAULT="object-value"
+          _J_V="";;
+        " "|""|" ") ;;
+        *) _json_die "corrupt json: $_J_PATHNAME";;
+      esac;;
+
+    # After a string key has been consumed, the state machine
+    # progresses here where a colon and a value are parsed.  The
+    # value is parsed in a subshell so the pathname can have the
+    # key appended to it before the parser continues.
+    "object-value")
+      case "$_J_C" in
+        ":")
+          _J_FD=1
+          (
+            [ "$_J_PATHNAME" = "/" ] && _J_PATHNAME=""
+            _J_PATHNAME="$_J_PATHNAME/$_J_V"
+            _J_STATE="whitespace"
+            _J_STATE_DEFAULT="object-exit"
+            _json
+          ) || case "$?" in
+            101) _J_STATE="object-even" _J_C="," _json_char;;
+            102) _J_STATE="object-even" _J_C="}" _json_char;;
+          esac
+          _J_STATE="object-even";;
+        " "|""|" ") ;;
+        *) _json_die "corrupt json: $_J_PATHNAME";;
+      esac;;
+
+    # Null values work exactly like boolean values.  See above.
+    "null")
+      case "$_J_V$_J_C" in
+        "n"|"nu"|"nul") _J_V="$_J_V$_J_C";;
+        "null")
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME null null" >&$_J_FD;;
+        *) _json_die "corrupt json: $_J_PATHNAME null $_J_V$_J_C";;
+      esac;;
+
+    # Numbers that encounter a '.' become floating point and may
+    # continue consuming digits forever or may become
+    # scientific-notation.  Any other character sends the parser
+    # back to its default state.
+    "number-float")
+      case "$_J_C" in
+        [0-9]) _J_V="$_J_V$_J_C";;
+        "E"|"e") _J_STATE="number-sci" _J_V="$_J_V$_J_C";;
+        *)
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME number $_J_V" >&$_J_FD
+          _json_char;;
+      esac;;
+
+    # This is an entrypoint into parsing a number, used when
+    # the first digit consumed is non-zero.  From here, a number
+    # may continue on a positive integer, become a floating-point
+    # number by consuming a '.', or become scientific-notation by
+    # consuming an 'E' or 'e'.  Any other character sends the
+    # parser back to its default state.
+    "number-leading-nonzero")
+      case "$_J_C" in
+        ".") _J_STATE="number-float" _J_V="$_J_V$_J_C";;
+        [0-9]) _J_V="$_J_V$_J_C";;
+        "E"|"e") _J_STATE="number-sci" _J_V="$_J_V$_J_C";;
+        *)
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME number $_J_V" >&$_J_FD
+          _json_char;;
+      esac;;
+
+    # This is an entrypoint into parsing a number, used when
+    # the first digit consumed is zero.  From here, a number
+    # may remain zero, become a floating-point number by
+    # consuming a '.', or become scientific-notation by consuming
+    # an 'E' or 'e'.  Any other character sends the parser back
+    # to its default state.
+    "number-leading-zero")
+      case "$_J_C" in
+        ".") _J_STATE="number-float" _J_V="$_J_V$_J_C";;
+        [0-9]) _json_die "corrupt json: $_J_PATHNAME number $_J_V$_J_C";;
+        "E"|"e") _J_STATE="number-sci" _J_V="$_J_V$_J_C";;
+        *)
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME number $_J_V" >&$_J_FD
+          _json_char;;
+      esac;;
+
+    # This is an entrypoint into parsing a number, used when
+    # the first character consumed is a '-'.  From here, a number
+    # may progress to the "number-leading-nonzero" or
+    # "number-leading-zero" states.  Any other character sends
+    # the parser back to its default state.
+    "number-negative")
+      case "$_J_C" in
+        0) _J_STATE="number-leading-zero" _J_V="$_J_V$_J_C";;
+        [1-9])
+          _J_STATE="number-leading-nonzero"
+          _J_V="$_J_V$_J_C";;
+        *)
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME number $_J_V" >&$_J_FD
+          _json_char;;
+      esac;;
+
+    # Numbers that encounter an 'E' or 'e' become
+    # scientific-notation and consume digits, optionally prefixed
+    # by a '+' or '-', forever.  The actual consumption is
+    # delegated to the "number-sci-neg" and "number-sci-pos"
+    # states.  Any other character immediately following the 'E'
+    # or 'e' is a corrupt json.
+    "number-sci")
+      case "$_J_C" in
+        "+") _J_STATE="number-sci-pos" _J_V="$_J_V$_J_C";;
+        "-") _J_STATE="number-sci-neg" _J_V="$_J_V$_J_C";;
+        [0-9]) _J_STATE="number-sci-pos" _J_V="$_J_V$_J_C";;
+        *) _json_die "corrupt json: $_J_PATHNAME number $_J_V$_J_C";;
+      esac;;
+
+    # Once in these states, numbers may consume digits forever.
+    # Any other character sends the parser back to its default
+    # state.
+    "number-sci-neg"|"number-sci-pos")
+      case "$_J_C" in
+        [0-9]) _J_V="$_J_V$_J_C";;
+        *)
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME number $_J_V" >&$_J_FD
+          _json_char;;
+      esac;;
+
+    # Strings aren't as easy as they look.  JSON supports several
+    # escape sequences that require the state machine to keep a
+    # history of its input.  Basic backslash/newline/etc. escapes
+    # are simple because they only require one character of
+    # history.  Unicode codepoint escapes require more.  The
+    # strategy there is to add states to the machine.
+    #
+    # TODO It'd be nice to decode all escape sequences, including
+    # Unicode codepoints but that would definitely ruin the
+    # line-oriented thing we've got goin' on.
+    "string")
+      case "$_J_PREV_C$_J_C" in
+        "\\\""|"\\/"|"\\\\") _J_V="$_J_V$_J_C";;
+        "\\b"|"\\f"|"\\n"|"\\r")  _J_V="$_J_V\\\\$_J_C";;
+        "\\u") _J_V="$_J_V\\\\$_J_C";;
+        *"\"")
+          _J_STATE="$_J_STATE_DEFAULT"
+          echo "$_J_PATHNAME string $_J_V" >&$_J_FD;;
+        *"\\") ;;
+        *) _J_V="$_J_V$_J_C";;
+      esac;;
+
+  esac
+  set -u
+}
+
+# Print an error message and GTFO.  The message is the concatenation
+# of all the arguments to this function.
+_json_die() {
+  echo "aap> $*" >&2
+  exit 1
+}
+
+## PRIVATE FUNCTIONS ################################################################
+
+_cleanup(){
+  _print_errors
+  retcode=$?
+  rm $TMP.*
+  exit $retcode
+}
+
+_logo(){
+  echo '
+ ʕ•x•ʔ
++-+-+-+  Buildpacks for the web
+|a|a|p|  [https://github.com/coderofsalvation/aap]
++-+-+-+
+
+  '
+}
+
+_parse_args(){
+  ARGS=() ; OPTS=()
+  for i in "$@"; do [[ $i =~ ^- ]] && {
+    [[ $i =~ "=" ]] && OPTS["$i"]="${i/*=/}" || OPTS["$i"]="Aaaa";
+  } || ARGS+=("$i"); done
+}
+
+_check(){
+  for app in pstree ps sed awk; do which $app &>/dev/null || { echo "please install $app"; exit 1; }; done
+  set +u; [[ ! -n $1 ]] && _usage
+  set -u
+  return 0
+}
+
+_usage(){
+  grep '^# Usage' $0 -A20 | sed 's/^#//g'
+}
+
+_console(){
+  cat - | while IFS='' read line; do echo "  $line"; done | grep -v 'set +x'
+}
+
+_error(){
+  echo "$*" >> $TMP.err 
+}
+
+_were_errors(){
+  nerrors="$(cat $TMP.err | wc -l )"
+  [[ $nerrors != 0 ]] && return 0 || return 1
+}
+
+_print_errors(){
+  if _were_errors; then 
+    echo -e "errors: \n"
+    cat $TMP.err | cat -n - | sed 's/^/ /g'
+    return 1
+  fi
+  return 0
+}
+
+_option_passed(){
+  set +u; opts="${OPTS["$1"]}"; set -u
+  [[ ${#opts} > 0 ]] && return 0 || return 1
+}
+
+_get_dependency_client(){
+  [[ "$1" =~ "git" ]]      && echo "git" && return
+  [[ "$1" =~ "pip" ]]      && echo "pip" && return
+  [[ "$1" =~ "npm" ]]      && echo "npm" && return
+  [[ "$1" =~ "composer" ]] && echo "composer" && return
+}
+
+_exec(){
+  set -x; "$@"; ret=$?; set +x; return $ret
+}
+
+_install_dependency_with_client(){
+  [[ ! -n "$2" ]] && { echo "usage: _install_dependency_with_client <client> <source> <path>"; exit 1; }
+  case "$1" in 
+    pip)       _exec pip clone "$2" $3
+               ;;
+    git)       _exec git clone "$2" $3
+               ;;
+    npm)       _exec npm install "${2/npm:\/\//}" $3
+               ;;
+    composer)  _exec composer install "${2/composer:/}" $3
+               ;;
+  esac
+}
+
+_install_dependency(){
+  name="$1" ; source="$2" ; path="$3"
+  client="$(_get_dependency_client "$source")"
+  if [[ -d "$path/$name" ]] && ! _option_passed "-f"; then 
+    echo "'$path/name' already exist..retry with -f to force"
+  else 
+    echo "installing '$name'"
+    if [[ "${#path}" > 0 ]]; then 
+      [[ ${path:0:1} == "/" ]] && path="${path:1:$((${#path}-1))}"
+      [[ -d "$path" ]] && rm -rf "$path"
+      [[ ! -d "$path" ]] && { mkdir -p "$path" || { echo "could not create dir $path"; exit 1; } }
+    fi
+    _install_dependency_with_client $client "$source" "$path" 2>&1 | sed 's/^+ /$ /g;s/^/    ├─ /g' | grep -vE "(set +x|ret=.*)" 
+    [[ ! $? == 0 ]] && _error "could not install '$name' from $source" 
+    echo ""
+  fi
+}
+
+_install_all(){
+  json="$(json <aap.json)"
+  deps="$( echo "$json" | grep "dependencies"; if _option_passed '--dev'; then echo "$json" | grep "overrule.*dependencies"; fi )"
+  _logo
+  echo "$deps" | while read name type value; do 
+    [[ "$name" =~ ":" ]] && path="${name/*://}" || path=""
+    name="$( basename "${name/:*/}" )"
+    _install_dependency "$name" "$value" "$path"
+  done 
+}
+
+## PUBLIC FUNCTIONS #################################################################
+
+# init 
+init(){
+  _parse_args "$@" # populate OPTS and ARGS array 
+  [[ -f aap.json ]] && ! _option_passed '-f' && { 
+    read -p "aap> already inited..reinit? (y/n) " y; [[ ! $y == "y" ]] && exit 0; 
+  } 
+  appname="${ARGS[0]}"
+  [[ ${#appname} == 0 ]] && appname="$(basename $(pwd) )"
+  printf "$aap_json" "$appname" | sed "s/\"\"\"/'/g" > aap.json
+}
+
+install(){
+  _parse_args "$@" # populate OPTS and ARGS array 
+  if [[ ${#ARGS[@]} == 0 ]]; then 
+    _install_all; 
+  else 
+    for arg in ${ARGS[@]}; do 
+      name="$(basename "$arg")"; set +u; path="$3"; set -u
+      _install_dependency "$name" "$arg" "$path"
+      ! _were_errors && {
+        if _option_passed '--save'; then 
+          sed -i 's|dependencies":{|dependencies":{\n    "'$name'": "'$arg'",|g' aap.json
+        fi;
+      }
+    done
+  fi
+}
+
+_check "$@" && "$@" 2>&1 | _console 

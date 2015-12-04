@@ -1,0 +1,5 @@
+#!/bin/bash
+set -u
+for test in test/*; do $test; done
+echo 'OK'
+exit 0
