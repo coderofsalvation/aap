@@ -1,5 +1,5 @@
 {
-  "name": "aap",
+  "name": "foobar",
   "version": "1.0.0",
   "description": "",
   "website": "https://small-sharp-tool.com/",
@@ -8,22 +8,24 @@
   "scripts": {
     "postinstall": ["install_modules"]
     "postdeploy": ["start"],
-    "start": ".crowdr/crowdr start",
-    "stop": ".crowdr/crowdr stop",
-    "build": ".crowdr/crowdr build",
+    "start": "echo start",
+    "stop": "echo stop",
+    "build": "echo build",
     "backup": "zip -r data-`date +`.zip data",
-    "test": "echo 'Error: no test specified' && exit 0",
+    "test": "echo "Error: no test specified" && exit 0",
     "install_modules":"which npm && npm install; which composer && composer install"
   },
   "dependencies":{
-    "crowdr:.util/crowdr":"git@github.com:polonskiy/crowdr.git"
-    "bar": "ssh+git://username@bitbucket.org/username/package.git#commit",
-    "foo:src/components": "ssh+git://github.com/username/package.git#commit",
+    "mypythonpackage:python/mypythonpackage": "pip://mypythonpackage",
+    "myphppackage": "composer://myphppackage",
+    "css2js": "npm://css2js",
+    "mygitrepo.git": "ssh+git://user@github.com/username/mygitrepo.git",
+    "mybbrepo.git": "ssh+git://user@bitbucket.org/username/mybbrepo.git",
   },
   "env": {
-    "SECRET_TOKEN": {
+    "ADMIN_PASSWD": {
       "description": "A secret key for verifying the integrity of signed cookies.",
-      "generator": "secret"
+      "file": "data/.pw"
     },
     "WEB_CONCURRENCY": {
       "description": "The number of processes to run.",
@@ -31,7 +33,6 @@
     }
   },
   "devDependencies":{
-    "watchmakers": "npm://watchmakers"
   },
   "author": "",
   "license": "ISC"

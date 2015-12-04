@@ -3,5 +3,18 @@ cd "$(dirname "$(readlink -f "$0")" )"
 
 
 [[ -f aap.json ]] && rm aap.json
+[[ -d python ]] && rm -rf python 
 ../aap init foobar
-ls -la aap.json
+
+#../aap install ssh+git://user@bitbucket.org/username/backend.git     --save
+#../aap install ssh+git://user@github.com/username/core-api.git       --save
+#../aap install ssh+git://user@bitbucket.org/username/landingpage.git --save
+#../aap install ssh+git://user@github.com/username/crm-api.git        --save
+#../aap install ssh+git://user@github.com/username/docker.mysql.git   --save
+#../aap install ssh+git://user@github.com/username/docker.mongodb.git --save
+#../aap install npm://css2js --save 
+#../aap install composer://myphppackage --save 
+#mkdir python
+#cd python && ../../aap install pip://mypythonpackage --save 
+#cd ..
+#cat aap.json

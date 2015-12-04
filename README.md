@@ -1,5 +1,7 @@
 <img alt="" src="doc/logo.jpg"/>
 
+> NOTE: very beta
+
 Language-agnostic buildpacks using aap.json.
 A package manager aggregator & buildtool.
 
@@ -10,11 +12,11 @@ A package manager aggregator & buildtool.
     $ aap init
     $ aap install ssh+git://user@bitbucket.org/username/foo.git --save
     $ aap install ssh+git://user@github.com/username/foo.git --save
-    $ aap install npm://browserify --save 
-    $ aap install composer://browserify --save 
-    $ aap install pip://packagename --save 
+    $ aap install npm://css2js --save 
+    $ aap install composer://modulename --save 
+    $ cd python && aap install pip://packagename --save 
 
-> If you're used to `npm` or `composer`, you will feel right at home.
+> aap.json is now generated (click [here](doc/aap.json) If you're used to `npm` or `composer`, you will feel right at home.
 
 ## Why
 
@@ -31,3 +33,5 @@ Which allows any system to build a project from multiple remote sources.
 
 * run/deploy a cloud using multiple Docker cloudservices in one repo using [crowdr](https://github.com/polonskiy/crowdr)
 * depency management: wrap several repositories and modules in one repository
+* use in and outside dockers 
+* install package managers in environments where they're not installed

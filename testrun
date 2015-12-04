@@ -1,5 +1,5 @@
 #!/bin/bash
 set -u
-for test in test/*; do $test; done
+for test in test/*; do [[ -x $test && ! -d $test ]] && $test; done
 echo 'OK'
 exit 0

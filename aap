@@ -29,6 +29,7 @@
 #                                      ┆   ssh+git://github.com/username/package.git#master@1.0.2
 #                                      ┆   npm://browserify 
 #                                      ┆   composer://user/packagename
+#   aap run <script>                   ┆ runs script defined in aap.json 
 # 
 # Copyright (C) 2015, Leon van KAmmen 
 # 
@@ -59,6 +60,7 @@ dir_exists(){ [[ -d "$1" || -L "$1" ]] && return 0 || return 1; }
 trap "_cleanup" 0 1 SIGINT SIGTERM 
 
 ## TEMPLATES ########################################################################
+q="'"
 aap_json='{
   "name": "%s",
   "version": "1.0.0",
@@ -67,19 +69,16 @@ aap_json='{
   "repository": "https://github.com/jane-doe/small-sharp-tool",
   "logo": "https://small-sharp-tool.com/logo.svg",
   "scripts": {
-    "postinstall": ["install_modules"]
+    "postinstall": ["install_modules"],
     "postdeploy": ["start"],
-    "start": ".crowdr/crowdr start",
-    "stop": ".crowdr/crowdr stop",
-    "build": ".crowdr/crowdr build",
+    "start": "echo start",
+    "stop": "echo stop",
+    "build": "echo build",
     "backup": "zip -r data-`date +`.zip data",
-    "test": "echo \"Error: no test specified\" && exit 0",
+    "test": "echo $qError: no test specified$q && exit 0",
     "install_modules":"which npm && npm install; which composer && composer install"
   },
   "dependencies":{
-    "bar": "ssh+git://username@bitbucket.org/username/package.git#commit",
-    "foo:src/components": "ssh+git://github.com/username/package.git#commit",
-    "crowdr:.crowdr":"git@github.com:polonskiy/crowdr.git"
   },
   "env": {
     "ADMIN_PASSWD": {
@@ -92,7 +91,6 @@ aap_json='{
     }
   },
   "devDependencies":{
-    "watchmakers": "npm://watchmakers"
   },
   "author": "",
   "license": "ISC"
@@ -515,6 +513,16 @@ _json_die() {
 
 ## PRIVATE FUNCTIONS ################################################################
 
+_upsearch () {
+  slashes=${PWD//[^\/]/}
+  directory="$PWD"
+  for (( n=${#slashes}; n>0; --n ))
+  do
+    test -e "$directory/$1" && echo "$directory/$1" && return 
+    directory="$directory/.."
+  done
+}
+
 _cleanup(){
   _print_errors
   retcode=$?
@@ -530,6 +538,11 @@ _logo(){
 +-+-+-+
 
   '
+}
+
+_cleanup_json(){
+  # this magic removes commas which should not be there
+  json="$(<$1)"; echo "$json" | tr '\n' '\t' | sed 's/,[\t ]\+}/\t  }/g' | tr '\t' '\n' > $1
 }
 
 _parse_args(){
@@ -639,7 +652,7 @@ init(){
   [[ -f aap.json ]] && ! _option_passed '-f' && { 
     read -p "aap> already inited..reinit? (y/n) " y; [[ ! $y == "y" ]] && exit 0; 
   } 
-  appname="${ARGS[0]}"
+  set +u; appname="${ARGS[0]}"; set -u
   [[ ${#appname} == 0 ]] && appname="$(basename $(pwd) )"
   printf "$aap_json" "$appname" | sed "s/\"\"\"/'/g" > aap.json
 }
@@ -654,7 +667,18 @@ install(){
       _install_dependency "$name" "$arg" "$path"
       ! _were_errors && {
         if _option_passed '--save'; then 
-          sed -i 's|dependencies":{|dependencies":{\n    "'$name'": "'$arg'",|g' aap.json
+          aapfile="aap.json"
+          [[ ! -f $aapfile ]] && {
+            aapfile="$(_upsearch "aap.json" | head -n1 )"
+            name="$(echo "$name:$(pwd)/$name" | sed "s|$(dirname "$(readlink -f "$aapfile")" )/||g" )"
+          }
+          line='"'$name'": "'$arg'",'
+          if grep -q "$line" $aapfile; then 
+            echo "not saving..already in aap.json"
+          else 
+            sed -i "s|dependencies\":{|dependencies\":{\n    $line|g" $aapfile
+            _cleanup_json $aapfile
+          fi  
         fi;
       }
     done
