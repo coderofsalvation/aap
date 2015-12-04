@@ -1,6 +1,6 @@
 {
   "name": "aap.bash",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "language-agnostic buildpacks using aap.json: a npm-inspired, highlevel dependecy manager/buildtool using bash+git",
   "main": "index.js",
   "directories": {
