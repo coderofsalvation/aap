@@ -1,0 +1,35 @@
+{
+  "name": "aap",
+  "version": "1.0.0",
+  "description": "language-agnostic buildpacks using aap.json, a npm-inspired package manager aggregator & buildtool in bash",
+  "main": "index.js",
+  "directories": {
+    "doc": "doc",
+    "test": "test"
+  },
+  "bin":{ "aap":"aap"
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://coderofsalvation@github.com/coderofsalvation/aap.git"
+  },
+  "keywords": [
+    "package",
+    "manager",
+    "buildtool",
+    "utility",
+    "language-agnostic",
+    "bash",
+    "aap",
+    "deploy",
+    "dependencymanager"
+  ],
+  "author": "coderofsalvation",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/coderofsalvation/aap/issues"
+  },
+  "homepage": "https://github.com/coderofsalvation/aap#readme"
+}

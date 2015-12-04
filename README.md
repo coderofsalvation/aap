@@ -2,8 +2,7 @@
 
 > NOTE: very beta
 
-Language-agnostic buildpacks using aap.json.
-A package manager aggregator & buildtool.
+In the beginning there was bash..and bash had aap.json
 
 ![Build Status](https://travis-ci.org/coderofsalvation/aap.svg?branch=master)
 
