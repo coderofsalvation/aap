@@ -15,7 +15,17 @@ In the beginning there was bash..and bash had aap.json
     $ aap install composer://modulename --save 
     $ cd python && aap install pip://packagename --save 
 
-> aap.json is now generated (click [here](doc/aap.json) If you're used to `npm` or `composer`, you will feel right at home.
+> aap.json is now generated (click [here](doc/aap.json) 
+
+If you're used to `npm` or `composer`, you will feel right at home.
+
+## Installation
+
+    npm install aap.bash
+
+or 
+    wget "https://raw.githubusercontent.com/coderofsalvation/aap/master/aap" -O aap
+    chmod 755 aap
 
 ## Why
 
@@ -26,7 +36,9 @@ Basically `aap init` generates `aap.json` like [this](doc/aap.json), which allow
 
     $ aap install
 
-Which allows any system to build a project from multiple remote sources.
+Get any system to build a project from multiple remote sources.
+
+> Only requirements: git + bash
 
 ## Goals/Usecases 
 
