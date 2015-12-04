@@ -24,6 +24,7 @@ If you're used to `npm` or `composer`, you will feel right at home.
     npm install aap.bash
 
 or 
+
     wget "https://raw.githubusercontent.com/coderofsalvation/aap/master/aap" -O aap
     chmod 755 aap
 
