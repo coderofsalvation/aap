@@ -52,7 +52,10 @@ Congrats! Now other devs can easily run or [deploy a cloud locally](doc/cloud.md
 
 > NOTE recursive installation is supported when `aap.json` occurs in gitrepo-dependencies as well.
 
-Like npm, you can easily [trigger scripts](docs/scripts.md) using the `aap run <cmd>`, to build and configure stuff from one central place.
+## Scripts, triggers'n' hooks
+
+See [here how to trigger scripts](doc/scripts.md) using the `aap run <cmd>`, to build and configure stuff from one central place.
+Perfect for monkeypatching your app before turning on the engine, compiling sources etc.
 
 ## Installation
 
