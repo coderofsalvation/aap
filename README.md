@@ -16,12 +16,12 @@ A package manager aggregator & buildtool.
 
 > If you're used to `npm` or `composer`, you will feel right at home.
 
-## What happened?
+## Why
 
 Now you can easily manage dependencies of gitrepos, npm/composer modules and dockerrepos.
 All combined in one slim repo.
 
-Basically you end up with an `aap.json` like [this](doc/aap.json), which allows you to run:
+Basically `aap init` generates `aap.json` like [this](doc/aap.json), which allows you to run:
 
     $ aap install
 
