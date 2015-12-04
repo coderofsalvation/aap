@@ -1,6 +1,6 @@
 <img alt="" src="doc/logo.jpg"/>
 
-> NOTE: very beta
+> NOTE: beta
 
 In the beginning there was bash..and bash had aap.json
 

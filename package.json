@@ -7,7 +7,7 @@
     "doc": "doc",
     "test": "test"
   },
-  "bin":{ "aap":"aap"
+  "bin":{ "aap":"aap" },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
