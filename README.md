@@ -13,14 +13,14 @@ Lets start a project by adding dependencies to it:
 
     $ git init 
     $ aap init
-    $ aap install ssh+git://user@bitbucket.org/username/backend.git     --save
-    $ aap install ssh+git://user@github.com/username/core-api.git       --save
-    $ aap install ssh+git://user@bitbucket.org/username/landingpage.git --save
-    $ aap install ssh+git://user@github.com/username/crm-api.git        --save
-    $ aap install ssh+git://user@github.com/username/docker.mysql.git   --save
-    $ aap install ssh+git://user@github.com/username/docker.mongodb.git --save
-    $ aap install npm://css2js --save 
-    $ aap install composer://myphppackage --save 
+    $ aap install ssh+git://user@bitbucket.org/username/backend.git            --save
+    $ aap install ssh+git://user@github.com/username/core-api.git              --save
+    $ aap install ssh+git://user@bitbucket.org/username/landingpage.git        --save
+    $ aap install ssh+git://user@github.com/username/crm-api.git@1.3.4#master  --save
+    $ aap install ssh+git://user@github.com/username/docker.mysql.git          --save
+    $ aap install ssh+git://user@github.com/username/docker.mongodb.git        --save
+    $ aap install npm://css2js@1.0.3                                           --save 
+    $ aap install composer://myphppackage@1.4.3                                --save 
     $ mkdir python
     $ cd python && ../../aap install pip://mypythonpackage --save 
  
