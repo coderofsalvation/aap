@@ -26,7 +26,7 @@ Nice! Now aap.json will look like [this](doc/aap.json)
 
 Now lets push our buildpack to the repo:
 
-    $ git add app.json && git commit -m "added aap manifest"
+    $ git add aap.json && git commit -m "added aap manifest"
     $ git push origin master
 
 Congrats! Now other devs can easily run or [deploy a cloud locally](doc/cloud.md):
