@@ -87,6 +87,7 @@ Get any system to build a project from multiple remote sources.
 * use in and outside dockers 
 * install package managers in environments where they're not installed
 * avoid git submodules (gets laborous pretty easily)
+* readability: deploy and dependency info confined in one jsonfile (aap.json) to minimize shellscriptism
 
 ## Todo 
 
