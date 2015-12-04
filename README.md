@@ -1,7 +1,5 @@
 <img alt="" src="doc/logo.jpg"/>
 
-> NOTE: beta
-
 In the beginning there was bash..and bash had aap.json
 
 ![Build Status](https://travis-ci.org/coderofsalvation/aap.svg?branch=master)
