@@ -130,3 +130,4 @@ Get any system to build a project from multiple remote sources.
 * git commits and tags
 * npm versions
 * aap bake aap.json > myinstaller
+* global commands: source ~/.aap*.json
