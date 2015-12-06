@@ -24,12 +24,12 @@ Lets start a project by adding dependencies to it:
  
 Nice! Now aap.json will look like [this](doc/aap.json)
 
-Now lets push our buildpack to the repo:
+Now lets push our `aap.json` buildpack to the repo:
 
     $ git add aap.json && git commit -m "added aap manifest"
     $ git push origin master
 
-Congrats! Now other devs can easily run or [deploy a cloud locally](doc/cloud.md):
+Congrats! Now with this `aap.json`, other devs can easily install dependencies like so:
 
     $ aap install
 
@@ -51,6 +51,11 @@ Congrats! Now other devs can easily run or [deploy a cloud locally](doc/cloud.md
         
 
 > NOTE recursive installation is supported when `aap.json` occurs in gitrepo-dependencies as well.
+
+## Usecases
+
+The usecases can range from application builds from a repository, till selfcontained installers, till
+[deploying docker clouds](doc/cloud.md):
 
 ## Scripts, triggers'n' hooks
 
@@ -110,7 +115,7 @@ Get any system to build a project from multiple remote sources.
                                           ┆   composer://user/packagename
        aap run <script>                   ┆ runs script defined in aap.json 
      
-## Goals/Usecases 
+## Other possible goals 
 
 * [run/deploy a cloud](doc/cloud.md) using multiple Docker cloudservices in one repo using [crowdr](https://github.com/polonskiy/crowdr)
 * depency management: wrap several repositories and modules in one repository
@@ -121,5 +126,7 @@ Get any system to build a project from multiple remote sources.
 
 ## Todo 
 
-* `aap update`
-* `aap run`
+* aap update
+* git commits and tags
+* npm versions
+* aap bake aap.json > myinstaller
