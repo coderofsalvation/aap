@@ -25,8 +25,10 @@
 #                                      ┆   ssh+git://user@bitbucket.org/user/repo.git
 #                                      ┆   ssh+git://github.com/username/package.git
 #                                      ┆   ssh+git://github.com/username/package.git#master
-#                                      ┆   ssh+git://github.com/username/package.git#master#commit
-#                                      ┆   ssh+git://github.com/username/package.git#master@1.0.2
+#                                      ┆   ssh+git://github.com/username/package.git#master@commit
+#                                      ┆   https://github.com/coderofsalvation/aap/archive/tagname.zip
+#                                      ┆   https://foobar.com/foo.txt
+#                                      ┆   https://foobar.com/archive.tar.gz
 #                                      ┆   npm://browserify 
 #                                      ┆   composer://user/packagename
 #   aap run <script>                   ┆ runs script defined in aap.json 
@@ -597,6 +599,9 @@ _get_dependency_client(){
   [[ "$1" =~ "pip" ]]      && echo "pip" && return
   [[ "$1" =~ "npm" ]]      && echo "npm" && return
   [[ "$1" =~ "composer" ]] && echo "composer" && return
+  which curl && return
+  which wget && return
+  echo "please install 'curl' or 'wget' in order to fetch http(s) resources" && exit 1
 }
 
 _exec(){
@@ -614,21 +619,20 @@ _install_dependency_with_client(){
                ;;
     composer)  _exec composer install "${2/composer:/}" $3
                ;;
-    *)         if which $1 &>/dev/null; then 
-                 [[ -n $3 ]] && cd $3
-                 $1 $2 
-                 [[ -n $3 ]] && cd -
-               else 
-                 echo "$1 client not installed or found" && return 1
-               fi
+    
+    *)         [[ -n $3 ]] && cd $3
+               _exec $1 $2 
+               [[ -n $3 ]] && cd -
                ;;
               
   esac
   if [[ "$1" == "git" ]]; then 
-    [[ ${#path} > 0 ]] && cd $3 || cd "$(basename "$2")"
+    [[ ${#3} > 0 ]] && cd $3 || cd "$(basename "$2")"
     [[ -f aap.json ]] && { 
-      $( readlink "$0" ) install & 
-      wait $! ; [[ ! $? == 0 ]] && return 1;
+      aapbin="$self_path/aap"
+      $aapbin run preinstall ; $aapbin run install && $aapbin run postinstall 
+      #( $(readlink "$0") preinstall ; $( readlink "$0" ) install && $(readlink "$0") postinstall ) & 
+      #wait $! ; [[ ! $? == 0 ]] && return 1;
     }
   fi
   return 0
@@ -646,7 +650,7 @@ _install_dependency(){
       [[ -d "$path" ]] && rm -rf "$path"
       [[ ! -d "$path" ]] && { mkdir -p "$path" || { echo "could not create dir $path"; exit 1; } }
     fi
-    _install_dependency_with_client $client "$source" "$path" 2>&1 | sed 's/^+ /$ /g;s/^/    ├─ /g' | grep -vE "(set +x|ret=.*)" 
+    _install_dependency_with_client $client "$source" "$path" 2>&1 | sed 's/^+ /$ /g;s/^/    ├─ /g' | grep -vE "(set +x|ret=.*|eval )" 
     [[ ! $? == 0 ]] && _error "could not install '$name' from $source" 
     echo ""
   fi
@@ -683,7 +687,7 @@ _install_dependency_save(){
 }
 
 _run_cmd(){
-  cmd="${1/*string /}"; eval "$cmd"
+  cmd="${1/*string /}"; _exec eval "$cmd"
 }
 
 ## PUBLIC FUNCTIONS #################################################################
@@ -720,6 +724,7 @@ run(){
       echo -e "Usage: aap run <cmd>\n\navailable commands:\n"
       echo "$json" | grep scripts | sed 's/\/scripts\///g;s/[\/ ].*//g;s/^/  /g';
     else 
+      echo "triggering 'aap run $1'"
       _run_cmd "$(echo "$json" | grep -F scripts/$1 )"
     fi
     set -u
