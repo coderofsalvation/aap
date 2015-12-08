@@ -613,7 +613,7 @@ _install_dependency_with_client(){
   case "$1" in 
     pip)       _exec pip clone "$2" $3
                ;;
-    git)       _exec git clone "$2" $3
+    git)       _exec git clone "$2" $3 || return 1
                ;;
     npm)       _exec npm install "${2/npm:\/\//}" $3
                ;;
@@ -627,7 +627,7 @@ _install_dependency_with_client(){
               
   esac
   if [[ "$1" == "git" ]]; then 
-    [[ ${#3} > 0 ]] && cd $3 || cd "$(basename "$2")"
+    [[ ${#3} > 0 ]] && cd "$3" || cd "$(basename "${2%.*}")"
     [[ -f aap.json ]] && { 
       aapbin="$self_path/aap"
       $aapbin run preinstall ; $aapbin run install && $aapbin run postinstall 
