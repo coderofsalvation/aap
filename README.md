@@ -126,7 +126,8 @@ Get any system to build a project from multiple remote sources.
 
 ## Todo 
 
-* aap update
+* aap update cmd
+* rewrite in [powscript](http://github.com/coderofsalvation/powscript)
 * git commits and tags
 * npm versions
 * aap bake aap.json > myinstaller
